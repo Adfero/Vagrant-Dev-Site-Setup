@@ -7,10 +7,10 @@ db=$3
 archive=$4
 
 # Clone LAMP stack
-#git clone https://github.com/r8/vagrant-lamp.git
+git clone https://github.com/r8/vagrant-lamp.git
 
 # Rename LAMP stack to project name
-mv vagrant-lamp-master "$name"
+mv vagrant-lamp "$name"
 
 # Move into project directory
 cd "$name"
