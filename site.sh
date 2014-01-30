@@ -1,21 +1,29 @@
 #!/bin/bash
  
 # TODO
-# 1. Add Drush support on staging side export
+# 1. Add Drush aliases support on staging side export
 
 # Load command prompt params
 name=$1
 site_type=$2
 repo=$3
-staging_user=$4
-staging_host=$5
-staging_path=$6
-staging_mysql_user=$7
-staging_mysql_db=$8
-staging_mysql_pw=$9
-staging_mysql_host=${10}
 
-echo "Building vagrant site:
+
+if [ $# -eq 5 ]; then
+	staging_host=$4
+	db_file=$5
+elif [ $# -eq 10 ]; then
+	staging_user=$4
+	staging_host=$5
+	staging_path=$6
+	staging_mysql_user=$7
+	staging_mysql_db=$8
+	staging_mysql_pw=$9
+	staging_mysql_host=${10}
+fi
+
+
+echo "Building Vagrant site:
 
       /|\     \\\\     //=\\
      // \\\\      \\\\  //
@@ -27,17 +35,24 @@ echo "Building vagrant site:
                 _/
 
 ================================================================================
-Name:			${name}
-Type:			${site_type}
-Stating User:		${staging_user}
-Staging Host:		${staging_host}
-Staging Path:		${staging_path}
-Staging MySQL User: 	${staging_mysql_user}
-Staging MySQL DB:	${staging_mysql_db}
-Staging MySQL PW:	${staging_mysql_pw}
-Staging MySQL Host: 	${staging_mysql_host}
-================================================================================
-"
+Name:                   ${name}
+Type:                   ${site_type}
+Repo:                   ${repo}"
+
+if [ $# -eq 10 ]; then
+	echo "Stating User:           ${staging_user}
+Staging Host:           ${staging_host}
+Staging Path:           ${staging_path}
+Staging MySQL User:     ${staging_mysql_user}
+Staging MySQL DB:       ${staging_mysql_db}
+Staging MySQL PW:       ${staging_mysql_pw}
+Staging MySQL Host:     ${staging_mysql_host}"
+elif [ $# -eq 5 ]; then
+	echo "Staging Host:           ${staging_host}
+Local DB Path:          ${db_file}"
+fi
+
+echo "================================================================================"
 
 echo -n "Starting in ...  "
 i=3
@@ -48,8 +63,6 @@ while [ $i -gt 0 ]; do
 done
 
 echo
-
-#if false; then
 
 echo "Cloning Vagrant LAMP stack"
 git clone https://github.com/r8/vagrant-lamp.git #> /dev/null
@@ -65,6 +78,10 @@ cd "$name"
 echo "Setting up Vagrant"
 vagrant up #> /dev/null
 
+
+
+echo "Cloning the site into Vagrant"
+
 # Move into public HTML folder
 cd public/local.dev
 
@@ -72,10 +89,6 @@ cd public/local.dev
 rm -rf *
 rm .htaccess
 rm .gitignore
-
-
-
-echo "Cloning the site into Vagrant"
 
 # Initialize Git
 git init
@@ -86,34 +99,35 @@ git remote add origin "$repo"
 # Pull master branch of repo
 git pull origin master
 
-
-
-echo "Downloading the staging DB"
-
 # Move out to public 
-cd ../..
+cd ..
 
-# Export database on staging
-ssh "${staging_user}"@"${staging_host}" <<EOF
+if [ $# -eq 10 ]; then
+	echo "Downloading the staging DB"
+
+	# Export database on staging
+	ssh "${staging_user}"@"${staging_host}" <<EOF
 	mysqldump --user="${staging_mysql_user}" --password="${staging_mysql_pw}" --host="${staging_mysql_host}" ${staging_mysql_db} > /tmp/database.sql
 	exit
 EOF
 
-# Download database from staging
-sftp "${staging_user}"@"${staging_host}" <<EOF
+	# Download database from staging
+	sftp "${staging_user}"@"${staging_host}" <<EOF
 	get /tmp/database.sql
 	rm /tmp/database.sql
 	quit
 EOF
 
-
+elif [ $# -eq 5 ]; then
+	cp "$db_file" database.sql
+fi
 
 echo "Importing the staging DB"
 
 # Replace the staging hostname with the local hostname
 php <<EOF
 	<?php
-	\$path = 'public/database.sql';
+	\$path = getcwd().'/database.sql';
 	\$sql = file_get_contents(\$path);
 	\$sql = str_replace(${staging_host},'local.dev',\$sql);
 	file_put_contents(\$path,\$sql);
@@ -125,15 +139,13 @@ vagrant ssh <<EOF
 	drop schema if exists dev;
 	create schema dev;
 EOG
-	mysql --user=root --password=vagrant dev < /vagrant/database.sql
+	mysql --user=root --password=vagrant dev < /vagrant/public/database.sql
 	exit
 EOF
 
-
-
 echo "Setting up the configuration files"
 
-cd public/local.dev
+cd local.dev
 
 if [ "$site_type" == "drupal" ]; then
 	rm sites/default/settings.php
@@ -142,9 +154,12 @@ if [ "$site_type" == "drupal" ]; then
 elif [ "$site_type" == "wordpress" ]; then
 	rm wp-config.php
 	cp wp-config-sample.php wp-config.php
-	cat wp-config.php | sed -e "s/database_name_here/dev/g" > wp-config.php
-	cat wp-config.php | sed -e "s/username_here/root/g" > wp-config.php
-	cat wp-config.php | sed -e "s/password_here/vagrant/g" > wp-config.php
+	cat wp-config.php | sed -e "s/database_name_here/dev/g" > wp-config.php.tmp
+	mv wp-config.php.tmp wp-config.php
+	cat wp-config.php | sed -e "s/username_here/root/g" > wp-config.php.tmp
+	mv wp-config.php.tmp wp-config.php
+	cat wp-config.php | sed -e "s/password_here/vagrant/g" > wp-config.php.tmp
+	mv wp-config.php.tmp wp-config.php
 fi
 
 
