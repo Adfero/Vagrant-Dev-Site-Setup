@@ -2,8 +2,6 @@
  
 # TODO
 # 1. Add Drush support on staging side export
-# 2. Add site-type checking to properly handle WordPress config
-# 3. Replace hostname in DB
 
 # Load command prompt params
 name=$1
@@ -18,8 +16,19 @@ staging_mysql_pw=$9
 staging_mysql_host=${10}
 
 echo "Building vagrant site:
+
+      /|\     \\\\     //=\\
+     // \\\\      \\\\  //
+    //___\|    _||__||__  __   _  _  __
+   //----||  // ||--||-  -_/   ||/  /  \\
+  //     ||  \\\\_// ||    \__/ |/    \__/
+                  ||
+                 ||
+                _/
+
 ================================================================================
 Name:			${name}
+Type:			${site_type}
 Stating User:		${staging_user}
 Staging Host:		${staging_host}
 Staging Path:		${staging_path}
@@ -84,8 +93,6 @@ echo "Downloading the staging DB"
 # Move out to public 
 cd ../..
 
-
-
 # Export database on staging
 ssh "${staging_user}"@"${staging_host}" <<EOF
 	mysqldump --user="${staging_mysql_user}" --password="${staging_mysql_pw}" --host="${staging_mysql_host}" ${staging_mysql_db} > /tmp/database.sql
@@ -99,9 +106,18 @@ sftp "${staging_user}"@"${staging_host}" <<EOF
 	quit
 EOF
 
-#fi
+
 
 echo "Importing the staging DB"
+
+# Replace the staging hostname with the local hostname
+php <<EOF
+	<?php
+	\$path = 'public/database.sql';
+	\$sql = file_get_contents(\$path);
+	\$sql = str_replace(${staging_host},'local.dev',\$sql);
+	file_put_contents(\$path,\$sql);
+EOF
 
 # Upload database into MySQL
 vagrant ssh <<EOF
@@ -118,15 +134,24 @@ EOF
 echo "Setting up the configuration files"
 
 cd public/local.dev
-rm sites/default/settings.php
-cp sites/default/default.settings.php sites/default/settings.php
-echo "\$databases = array('default' => array ('default' => array ('database' => 'dev', 'username' => 'root', 'password' => 'vagrant', 'host' => 'localhost', 'port' => '', 'driver' => 'mysql', 'prefix' => '', ), ), );" >> sites/default/settings.php
+
+if [ "$site_type" == "drupal" ]; then
+	rm sites/default/settings.php
+	cp sites/default/default.settings.php sites/default/settings.php
+	echo "\$databases = array('default' => array ('default' => array ('database' => 'dev', 'username' => 'root', 'password' => 'vagrant', 'host' => 'localhost', 'port' => '', 'driver' => 'mysql', 'prefix' => '', ), ), );" >> sites/default/settings.php
+elif [ "$site_type" == "wordpress" ]; then
+	rm wp-config.php
+	cp wp-config-sample.php wp-config.php
+	cat wp-config.php | sed -e "s/database_name_here/dev/g" > wp-config.php
+	cat wp-config.php | sed -e "s/username_here/root/g" > wp-config.php
+	cat wp-config.php | sed -e "s/password_here/vagrant/g" > wp-config.php
+fi
 
 
 
-echo "Setting up the drush aliases file"
+#echo "Setting up the drush aliases file"
 
-exit
+#exit
 
 # cat <<EOF > /usr/share/php/drush/aliases.drushrc.php
 # <?php
