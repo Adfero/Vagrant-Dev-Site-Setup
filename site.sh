@@ -125,11 +125,11 @@ fi
 echo "Importing the staging DB"
 
 # Replace the staging hostname with the local hostname
-php <<EOF
-	<?php
+php -d memory_limit=1024M <<EOF
+	<?php 
 	\$path = getcwd().'/database.sql';
 	\$sql = file_get_contents(\$path);
-	\$sql = str_replace('${staging_host}','local.dev',\$sql);
+	\$sql = str_replace(trim('${staging_host}'),'local.dev',\$sql);
 	file_put_contents(\$path,\$sql);
 EOF
 
