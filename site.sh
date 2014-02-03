@@ -129,7 +129,7 @@ php <<EOF
 	<?php
 	\$path = getcwd().'/database.sql';
 	\$sql = file_get_contents(\$path);
-	\$sql = str_replace(${staging_host},'local.dev',\$sql);
+	\$sql = str_replace('${staging_host}','local.dev',\$sql);
 	file_put_contents(\$path,\$sql);
 EOF
 
